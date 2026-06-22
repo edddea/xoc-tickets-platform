@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "Xoc Tickets",
+    "slug": "xoc-tickets",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "platforms": ["android", "ios"],
+    "android": {
+      "package": "com.xoctickets.app",
+      "permissions": ["CAMERA"]
+    },
+    "plugins": [
+      ["expo-camera", { "cameraPermission": "Permite escanear boletos en la puerta." }]
+    ],
+    "extra": {
+      "apiBaseUrl": "https://xoc-tickets.com"
+    }
+  }
+}

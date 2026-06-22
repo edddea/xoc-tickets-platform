@@ -1,0 +1,15 @@
+{
+  "name": "xoc-tickets",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Boletera xoc-tickets.com — monorepo (web Next.js + app Android Expo + tipos compartidos)",
+  "workspaces": [
+    "apps/web",
+    "packages/shared"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace apps/web",
+    "build": "npm run build --workspace apps/web",
+    "seed": "node --experimental-strip-types apps/web/scripts/seed.ts"
+  }
+}
