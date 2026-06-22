@@ -93,12 +93,12 @@ export default function NuevoEventoPage() {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={label}>Precio base (MXN)</label>
-            <input className={inp} type="number" min={0} placeholder="0" value={form.precioBase} onChange={(e) => up('precioBase', Number(e.target.value))} />
+            <input className={inp} type="number" min={0} placeholder="0" value={form.precioBase || ''} onChange={(e) => up('precioBase', Number(e.target.value))} />
             <p className={hint}>Precio de referencia general del evento.</p>
           </div>
           <div>
             <label className={label}>Capacidad total</label>
-            <input className={inp} type="number" min={0} placeholder="0" value={form.capacidad} onChange={(e) => up('capacidad', Number(e.target.value))} />
+            <input className={inp} type="number" min={0} placeholder="0" value={form.capacidad || ''} onChange={(e) => up('capacidad', Number(e.target.value))} />
             <p className={hint}>Número máximo de asistentes en todo el evento.</p>
           </div>
         </div>
@@ -159,12 +159,12 @@ export default function NuevoEventoPage() {
               </div>
               <div>
                 {i === 0 && <p className="mb-1 text-xs text-neutral-500">Capacidad (personas)</p>}
-                <input className={inp} type="number" min={0} placeholder="0" value={s.capacidad}
+                <input className={inp} type="number" min={0} placeholder="0" value={s.capacidad || ''}
                   onChange={(e) => setSecciones((a) => a.map((x, j) => j === i ? { ...x, capacidad: Number(e.target.value) } : x))} />
               </div>
               <div>
                 {i === 0 && <p className="mb-1 text-xs text-neutral-500">Precio (MXN)</p>}
-                <input className={inp} type="number" min={0} placeholder="0" value={s.costo}
+                <input className={inp} type="number" min={0} placeholder="0" value={s.costo || ''}
                   onChange={(e) => setSecciones((a) => a.map((x, j) => j === i ? { ...x, costo: Number(e.target.value) } : x))} />
               </div>
             </div>
@@ -186,7 +186,7 @@ export default function NuevoEventoPage() {
               </div>
               <div>
                 {i === 0 && <p className="mb-1 text-xs text-neutral-500">Modificador de precio (MXN)</p>}
-                <input className={inp} type="number" placeholder="Ej. -50 (descuento) o 100 (cargo extra)" value={t.modificador}
+                <input className={inp} type="number" placeholder="Ej. -50 (descuento) o 100 (cargo extra)" value={t.modificador || ''}
                   onChange={(e) => setTipos((a) => a.map((x, j) => j === i ? { ...x, modificador: Number(e.target.value) } : x))} />
               </div>
             </div>
