@@ -44,8 +44,9 @@ export default function BuyForm({ evento, spei }: { evento: Evento; spei: SpeiIn
       const fd = new FormData();
       fd.append('file', voucher);
       const up = await fetch('/api/upload', { method: 'POST', body: fd });
-      if (!up.ok) throw new Error('No se pudo subir el comprobante.');
-      const { url } = await up.json();
+      const upData = await up.json();
+      if (!up.ok) throw new Error(upData.error || 'No se pudo subir el comprobante.');
+      const { url } = upData;
 
       const res = await fetch('/api/reservations', {
         method: 'POST',

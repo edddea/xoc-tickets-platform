@@ -113,13 +113,19 @@ export default function NuevoEventoPage() {
                   const file = e.target.files?.[0];
                   if (!file) return;
                   setUploadingImg(true);
-                  const fd = new FormData();
-                  fd.append('file', file);
-                  const res = await fetch('/api/upload', { method: 'POST', body: fd });
-                  const data = await res.json();
-                  if (data.url) up('imagen', data.url);
-                  else setError(data.error || 'Error al subir imagen.');
-                  setUploadingImg(false);
+                  setError(null);
+                  try {
+                    const fd = new FormData();
+                    fd.append('file', file);
+                    const res = await fetch('/api/upload', { method: 'POST', body: fd });
+                    const data = await res.json().catch(() => ({}));
+                    if (res.ok && data.url) up('imagen', data.url);
+                    else setError(data.error || `Error al subir imagen (HTTP ${res.status}).`);
+                  } catch {
+                    setError('Error de red al subir la imagen.');
+                  } finally {
+                    setUploadingImg(false);
+                  }
                 }} />
             </label>
             {form.imagen && (
