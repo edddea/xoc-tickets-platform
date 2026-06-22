@@ -16,7 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/" className="text-xl font-bold tracking-tight">
               🎟️ Xoc Tickets
             </Link>
-            <Link href="/admin" className="text-sm text-neutral-500 hover:text-neutral-900">
+            <Link href="/admin/login" className="text-sm text-neutral-500 hover:text-neutral-900">
               Acceso staff
             </Link>
           </div>

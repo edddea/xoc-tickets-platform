@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Gate LIGERO (corre en edge): solo verifica que exista la cookie de sesión.
-// La autorización real por rol se hace en el servidor (layout + API routes),
-// por eso NO importamos aquí Auth.js ni MongoDB (no funcionan en edge).
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (pathname === '/admin/login') return NextResponse.next();
@@ -18,5 +15,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*']
+  matcher: ['/admin', '/admin/:path*'],
 };
