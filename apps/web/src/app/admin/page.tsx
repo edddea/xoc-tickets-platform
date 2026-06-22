@@ -25,6 +25,18 @@ export default async function AdminHome() {
           <h2 className="font-semibold">🧾 Reservaciones</h2>
           <p className="text-sm text-neutral-500">Revisa comprobantes SPEI y aprueba pagos.</p>
         </Link>
+        <Link href="/admin/perfil"
+          className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm hover:shadow-md">
+          <h2 className="font-semibold">👤 Mi perfil</h2>
+          <p className="text-sm text-neutral-500">Configura tus datos de pago SPEI.</p>
+        </Link>
+        {role === 'admin' && (
+          <Link href="/admin/staff"
+            className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm hover:shadow-md">
+            <h2 className="font-semibold">👥 Staff</h2>
+            <p className="text-sm text-neutral-500">Administra los miembros del equipo y sus roles.</p>
+          </Link>
+        )}
       </div>
     </div>
   );
