@@ -1,4 +1,4 @@
-import { MongoClient, Db } from 'mongodb';
+import { MongoClient, Db, Document } from 'mongodb';
 
 // Cliente singleton de MongoDB (reutilizado entre invocaciones serverless).
 const uri = process.env.MONGODB_URI;
@@ -34,6 +34,6 @@ export async function getMongoClient(): Promise<MongoClient> {
 }
 
 // Helpers de colecciones
-export async function col(name: string) {
-  return (await getDb()).collection(name);
+export async function col<T extends Document = Document>(name: string) {
+  return (await getDb()).collection<T>(name);
 }

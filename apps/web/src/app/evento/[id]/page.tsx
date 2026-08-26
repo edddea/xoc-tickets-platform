@@ -1,8 +1,6 @@
 import { notFound } from 'next/navigation';
-import { obtenerEvento } from '@/lib/repo';
-import { col } from '@/lib/db';
+import { obtenerEvento, obtenerSpeiDeEvento } from '@/lib/repo';
 import { serialize, money } from '@/lib/utils';
-import { ObjectId } from 'mongodb';
 import type { Evento } from '@xoc/shared';
 import BuyForm from './BuyForm';
 
@@ -15,9 +13,11 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
   if (!doc) notFound();
   const ev = serialize<Evento>(doc);
 
-  const staff = await col('staff');
-  const organizador = await staff.findOne({ _id: new ObjectId(ev.organizadorId) });
-  const spei = organizador?.spei ?? null;
+  // Cuenta SPEI asociada al evento (o la primera del organizador como respaldo).
+  const cuenta = await obtenerSpeiDeEvento({ organizadorId: ev.organizadorId, speiCuentaId: ev.speiCuentaId });
+  const spei = cuenta
+    ? { alias: cuenta.alias ?? null, banco: cuenta.banco, beneficiario: cuenta.beneficiario, clabe: cuenta.clabe }
+    : null;
 
   return (
     <div className="grid gap-8 lg:grid-cols-2">

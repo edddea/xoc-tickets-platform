@@ -7,6 +7,114 @@ import type {
 } from '@xoc/shared';
 import { getMongoClient } from './db';
 
+// ---- Cuentas SPEI del staff (un staff puede tener varias) ----
+
+export interface SpeiCuentaInput {
+  alias?: string;
+  banco: string;
+  beneficiario: string;
+  clabe: string;
+}
+
+interface SpeiCuentaDoc {
+  _id: ObjectId;
+  alias: string;
+  banco: string;
+  beneficiario: string;
+  clabe: string;
+}
+
+interface StaffDoc {
+  _id: ObjectId;
+  speiCuentas?: SpeiCuentaDoc[];
+  spei?: { banco: string; beneficiario: string; clabe: string };
+}
+
+/** Normaliza y valida los campos de una cuenta SPEI. Lanza si son inválidos. */
+function normalizarCuenta(input: SpeiCuentaInput) {
+  const banco = String(input.banco ?? '').trim();
+  const beneficiario = String(input.beneficiario ?? '').trim();
+  const clabe = String(input.clabe ?? '').replace(/\D/g, '');
+  if (!banco || !beneficiario) throw new Error('Banco y beneficiario son obligatorios');
+  if (clabe.length !== 18) throw new Error('La CLABE debe tener 18 dígitos');
+  const alias = String(input.alias ?? '').trim() || `${banco} ••${clabe.slice(-4)}`;
+  return { alias, banco, beneficiario, clabe };
+}
+
+/**
+ * Devuelve las cuentas SPEI del staff. Si aún tiene el formato antiguo
+ * (objeto único `spei`), lo migra a `speiCuentas` de forma perezosa.
+ */
+export async function listarSpeiCuentas(uid: string) {
+  const staff = await col<StaffDoc>('staff');
+  const _id = new ObjectId(uid);
+  const user = await staff.findOne({ _id }, { projection: { speiCuentas: 1, spei: 1 } });
+  if (!user) return [];
+  if (Array.isArray(user.speiCuentas)) return user.speiCuentas;
+  if (user.spei?.clabe) {
+    const migrada = [{
+      _id: new ObjectId(),
+      alias: 'Cuenta principal',
+      banco: user.spei.banco,
+      beneficiario: user.spei.beneficiario,
+      clabe: user.spei.clabe,
+    }];
+    await staff.updateOne({ _id }, { $set: { speiCuentas: migrada }, $unset: { spei: '' } });
+    return migrada;
+  }
+  return [];
+}
+
+export async function agregarSpeiCuenta(uid: string, input: SpeiCuentaInput) {
+  await listarSpeiCuentas(uid); // asegura migración previa
+  const staff = await col<StaffDoc>('staff');
+  const cuenta = { _id: new ObjectId(), ...normalizarCuenta(input) };
+  await staff.updateOne({ _id: new ObjectId(uid) }, { $push: { speiCuentas: cuenta } });
+  return cuenta;
+}
+
+export async function editarSpeiCuenta(uid: string, cuentaId: string, input: SpeiCuentaInput) {
+  await listarSpeiCuentas(uid);
+  const staff = await col<StaffDoc>('staff');
+  const n = normalizarCuenta(input);
+  const res = await staff.updateOne(
+    { _id: new ObjectId(uid), 'speiCuentas._id': new ObjectId(cuentaId) },
+    {
+      $set: {
+        'speiCuentas.$.alias': n.alias,
+        'speiCuentas.$.banco': n.banco,
+        'speiCuentas.$.beneficiario': n.beneficiario,
+        'speiCuentas.$.clabe': n.clabe,
+      },
+    }
+  );
+  return res.matchedCount > 0;
+}
+
+export async function eliminarSpeiCuenta(uid: string, cuentaId: string) {
+  const staff = await col<StaffDoc>('staff');
+  const res = await staff.updateOne(
+    { _id: new ObjectId(uid) },
+    { $pull: { speiCuentas: { _id: new ObjectId(cuentaId) } } }
+  );
+  return res.modifiedCount > 0;
+}
+
+/** Resuelve la cuenta SPEI que debe mostrarse a los compradores de un evento. */
+export async function obtenerSpeiDeEvento(evento: {
+  organizadorId: ObjectId | string;
+  speiCuentaId?: ObjectId | string | null;
+}) {
+  const cuentas = await listarSpeiCuentas(evento.organizadorId.toString());
+  if (!cuentas.length) return null;
+  if (evento.speiCuentaId) {
+    const objetivo = evento.speiCuentaId.toString();
+    const match = cuentas.find((c) => c._id?.toString() === objetivo);
+    if (match) return match;
+  }
+  return cuentas[0]; // fallback: primera cuenta disponible
+}
+
 export async function listarEventosPublicos() {
   const events = await col('events');
   return events
@@ -36,10 +144,95 @@ export async function crearEvento(input: CrearEventoInput, organizadorId: string
     status: (input.status ?? 'borrador') as EventStatus,
     secciones: input.secciones.map((s) => ({ _id: new ObjectId(), ...s })),
     tiposBoleto: input.tiposBoleto.map((t) => ({ _id: new ObjectId(), ...t })),
+    speiCuentaId: input.speiCuentaId ? new ObjectId(input.speiCuentaId) : null,
     createdAt: new Date()
   };
   const res = await events.insertOne(doc);
   return { _id: res.insertedId, ...doc };
+}
+
+/**
+ * Eventos visibles para un miembro del staff:
+ * - admin: todos los eventos (activos y pasados)
+ * - organizador/otros: solo los que organiza
+ * Cada evento incluye un resumen con total de reservaciones y cuántas están
+ * pendientes de aprobar (para mostrar indicadores en el menú).
+ */
+export async function listarEventosDeStaff(uid: string, role?: string) {
+  const events = await col('events');
+  const filtro = role === 'admin' ? {} : { organizadorId: new ObjectId(uid) };
+  const lista = await events.find(filtro).sort({ fecha: -1 }).toArray();
+  if (!lista.length) return [];
+
+  const reservations = await col('reservations');
+  const ids = lista.map((e) => e._id);
+  const agg = await reservations.aggregate([
+    { $match: { eventId: { $in: ids } } },
+    {
+      $group: {
+        _id: '$eventId',
+        total: { $sum: 1 },
+        pendientes: {
+          $sum: { $cond: [{ $in: ['$paymentStatus', ['en_revision', 'pendiente']] }, 1, 0] },
+        },
+      },
+    },
+  ]).toArray();
+  const resumen = new Map(agg.map((a) => [a._id.toString(), { total: a.total as number, pendientes: a.pendientes as number }]));
+
+  return lista.map((e) => ({
+    ...e,
+    resumen: resumen.get(e._id.toString()) ?? { total: 0, pendientes: 0 },
+  }));
+}
+
+/**
+ * Un evento con todas sus reservaciones, y por cada reservación sus boletos
+ * (con status) y datos del cliente. Usado en el detalle de "Mis eventos".
+ */
+export async function obtenerEventoConReservaciones(eventId: string) {
+  const events = await col('events');
+  const evento = await events.findOne({ _id: new ObjectId(eventId) });
+  if (!evento) return null;
+
+  const [reservationsCol, ticketsCol, clientsCol] = await Promise.all([
+    col('reservations'), col('tickets'), col('clients'),
+  ]);
+
+  const reservas = await reservationsCol.find({ eventId: evento._id }).sort({ createdAt: -1 }).toArray();
+  const [clientes, tickets] = await Promise.all([
+    clientsCol.find({ _id: { $in: reservas.map((r) => r.clientId) } }).toArray(),
+    ticketsCol.find({ eventId: evento._id }).toArray(),
+  ]);
+
+  const clientePorId = new Map(clientes.map((c) => [c._id.toString(), c]));
+  const seccionPorId = new Map(
+    ((evento.secciones ?? []) as { _id: ObjectId; nombre: string }[]).map((s) => [s._id.toString(), s.nombre])
+  );
+
+  const ticketsPorReserva = new Map<string, unknown[]>();
+  for (const t of tickets) {
+    const k = t.reservationId.toString();
+    if (!ticketsPorReserva.has(k)) ticketsPorReserva.set(k, []);
+    ticketsPorReserva.get(k)!.push({
+      _id: t._id,
+      status: t.status,
+      seccion: seccionPorId.get(t.seccionId?.toString()) ?? 'General',
+      codigo: t._id.toString().slice(-6).toUpperCase(),
+    });
+  }
+
+  return {
+    evento,
+    reservas: reservas.map((r) => {
+      const cli = clientePorId.get(r.clientId.toString());
+      return {
+        ...r,
+        cliente: cli ? { nombre: cli.nombre, correo: cli.correo, telefono: cli.telefono } : null,
+        tickets: ticketsPorReserva.get(r._id.toString()) ?? [],
+      };
+    }),
+  };
 }
 
 // generateReservation: inserta clients + reservations + tickets en UNA transacción.

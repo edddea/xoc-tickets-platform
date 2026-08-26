@@ -30,6 +30,7 @@ export default function RowActions({ id, lookupToken, clienteNombre, clienteTele
   }
 
   async function rechazar() {
+    if (!confirm('¿Rechazar esta reservación? Sus boletos quedarán cancelados.')) return;
     setBusy(true);
     await fetch(`/api/reservations/${id}/reject`, { method: 'POST' });
     setBusy(false);
@@ -73,7 +74,7 @@ export default function RowActions({ id, lookupToken, clienteNombre, clienteTele
           Enviar por WhatsApp
         </a>
         <button onClick={() => router.refresh()} className="text-sm text-neutral-400 hover:text-neutral-600">
-          Quitar
+          Actualizar
         </button>
       </div>
     );

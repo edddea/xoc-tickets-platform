@@ -28,6 +28,15 @@ export interface TipoBoleto {
   modificador: number;
 }
 
+/** Cuenta SPEI registrada por un miembro del staff. Un staff puede tener varias. */
+export interface SpeiCuenta {
+  _id: string;
+  alias: string;          // nombre corto para distinguirla (ej. "Cuenta principal BBVA")
+  banco: string;
+  beneficiario: string;
+  clabe: string;          // 18 dígitos
+}
+
 export interface Evento {
   _id: string;
   titulo: string;
@@ -43,6 +52,7 @@ export interface Evento {
   status: EventStatus;
   secciones: Seccion[];
   tiposBoleto: TipoBoleto[];
+  speiCuentaId?: string | null;   // cuenta SPEI del organizador asociada al evento
   createdAt: string;
 }
 
@@ -100,6 +110,7 @@ export interface CrearEventoInput {
   status?: EventStatus;
   secciones: Omit<Seccion, '_id'>[];
   tiposBoleto: Omit<TipoBoleto, '_id'>[];
+  speiCuentaId?: string | null;
 }
 
 export interface ItemCompra {
