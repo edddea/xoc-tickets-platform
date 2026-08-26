@@ -7,6 +7,114 @@ import type {
 } from '@xoc/shared';
 import { getMongoClient } from './db';
 
+// ---- Cuentas SPEI del staff (un staff puede tener varias) ----
+
+export interface SpeiCuentaInput {
+  alias?: string;
+  banco: string;
+  beneficiario: string;
+  clabe: string;
+}
+
+interface SpeiCuentaDoc {
+  _id: ObjectId;
+  alias: string;
+  banco: string;
+  beneficiario: string;
+  clabe: string;
+}
+
+interface StaffDoc {
+  _id: ObjectId;
+  speiCuentas?: SpeiCuentaDoc[];
+  spei?: { banco: string; beneficiario: string; clabe: string };
+}
+
+/** Normaliza y valida los campos de una cuenta SPEI. Lanza si son inválidos. */
+function normalizarCuenta(input: SpeiCuentaInput) {
+  const banco = String(input.banco ?? '').trim();
+  const beneficiario = String(input.beneficiario ?? '').trim();
+  const clabe = String(input.clabe ?? '').replace(/\D/g, '');
+  if (!banco || !beneficiario) throw new Error('Banco y beneficiario son obligatorios');
+  if (clabe.length !== 18) throw new Error('La CLABE debe tener 18 dígitos');
+  const alias = String(input.alias ?? '').trim() || `${banco} ••${clabe.slice(-4)}`;
+  return { alias, banco, beneficiario, clabe };
+}
+
+/**
+ * Devuelve las cuentas SPEI del staff. Si aún tiene el formato antiguo
+ * (objeto único `spei`), lo migra a `speiCuentas` de forma perezosa.
+ */
+export async function listarSpeiCuentas(uid: string) {
+  const staff = await col<StaffDoc>('staff');
+  const _id = new ObjectId(uid);
+  const user = await staff.findOne({ _id }, { projection: { speiCuentas: 1, spei: 1 } });
+  if (!user) return [];
+  if (Array.isArray(user.speiCuentas)) return user.speiCuentas;
+  if (user.spei?.clabe) {
+    const migrada = [{
+      _id: new ObjectId(),
+      alias: 'Cuenta principal',
+      banco: user.spei.banco,
+      beneficiario: user.spei.beneficiario,
+      clabe: user.spei.clabe,
+    }];
+    await staff.updateOne({ _id }, { $set: { speiCuentas: migrada }, $unset: { spei: '' } });
+    return migrada;
+  }
+  return [];
+}
+
+export async function agregarSpeiCuenta(uid: string, input: SpeiCuentaInput) {
+  await listarSpeiCuentas(uid); // asegura migración previa
+  const staff = await col<StaffDoc>('staff');
+  const cuenta = { _id: new ObjectId(), ...normalizarCuenta(input) };
+  await staff.updateOne({ _id: new ObjectId(uid) }, { $push: { speiCuentas: cuenta } });
+  return cuenta;
+}
+
+export async function editarSpeiCuenta(uid: string, cuentaId: string, input: SpeiCuentaInput) {
+  await listarSpeiCuentas(uid);
+  const staff = await col<StaffDoc>('staff');
+  const n = normalizarCuenta(input);
+  const res = await staff.updateOne(
+    { _id: new ObjectId(uid), 'speiCuentas._id': new ObjectId(cuentaId) },
+    {
+      $set: {
+        'speiCuentas.$.alias': n.alias,
+        'speiCuentas.$.banco': n.banco,
+        'speiCuentas.$.beneficiario': n.beneficiario,
+        'speiCuentas.$.clabe': n.clabe,
+      },
+    }
+  );
+  return res.matchedCount > 0;
+}
+
+export async function eliminarSpeiCuenta(uid: string, cuentaId: string) {
+  const staff = await col<StaffDoc>('staff');
+  const res = await staff.updateOne(
+    { _id: new ObjectId(uid) },
+    { $pull: { speiCuentas: { _id: new ObjectId(cuentaId) } } }
+  );
+  return res.modifiedCount > 0;
+}
+
+/** Resuelve la cuenta SPEI que debe mostrarse a los compradores de un evento. */
+export async function obtenerSpeiDeEvento(evento: {
+  organizadorId: ObjectId | string;
+  speiCuentaId?: ObjectId | string | null;
+}) {
+  const cuentas = await listarSpeiCuentas(evento.organizadorId.toString());
+  if (!cuentas.length) return null;
+  if (evento.speiCuentaId) {
+    const objetivo = evento.speiCuentaId.toString();
+    const match = cuentas.find((c) => c._id?.toString() === objetivo);
+    if (match) return match;
+  }
+  return cuentas[0]; // fallback: primera cuenta disponible
+}
+
 export async function listarEventosPublicos() {
   const events = await col('events');
   return events
@@ -36,6 +144,7 @@ export async function crearEvento(input: CrearEventoInput, organizadorId: string
     status: (input.status ?? 'borrador') as EventStatus,
     secciones: input.secciones.map((s) => ({ _id: new ObjectId(), ...s })),
     tiposBoleto: input.tiposBoleto.map((t) => ({ _id: new ObjectId(), ...t })),
+    speiCuentaId: input.speiCuentaId ? new ObjectId(input.speiCuentaId) : null,
     createdAt: new Date()
   };
   const res = await events.insertOne(doc);

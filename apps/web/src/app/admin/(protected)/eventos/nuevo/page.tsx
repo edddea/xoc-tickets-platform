@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import type { CrearEventoInput } from '@xoc/shared';
+import type { CrearEventoInput, SpeiCuenta } from '@xoc/shared';
 import VenueMapPicker from '@/components/VenueMapPicker';
 
 type SeccionForm = { nombre: string; capacidad: number; costo: number };
@@ -16,9 +17,22 @@ export default function NuevoEventoPage() {
   });
   const [secciones, setSecciones] = useState<SeccionForm[]>([{ nombre: 'General', capacidad: 100, costo: 250 }]);
   const [tipos, setTipos] = useState<TipoForm[]>([{ nombre: 'Adulto', modificador: 0 }]);
+  const [speiCuentas, setSpeiCuentas] = useState<SpeiCuenta[]>([]);
+  const [speiCuentaId, setSpeiCuentaId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [uploadingImg, setUploadingImg] = useState(false);
+
+  // Carga las cuentas SPEI del organizador para poder asociar una al evento.
+  useEffect(() => {
+    fetch('/api/staff/spei')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((cuentas: SpeiCuenta[]) => {
+        setSpeiCuentas(cuentas);
+        if (cuentas.length) setSpeiCuentaId(cuentas[0]._id);
+      })
+      .catch(() => setSpeiCuentas([]));
+  }, []);
 
   function up<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((f) => ({ ...f, [k]: v }));
@@ -43,6 +57,7 @@ export default function NuevoEventoPage() {
       status,
       secciones: secciones.map((s) => ({ ...s, capacidad: Number(s.capacidad), costo: Number(s.costo) })),
       tiposBoleto: tipos.map((t) => ({ ...t, modificador: Number(t.modificador) })),
+      speiCuentaId: speiCuentaId || null,
     };
     const res = await fetch('/api/events', {
       method: 'POST',
@@ -193,6 +208,29 @@ export default function NuevoEventoPage() {
           ))}
           <button type="button" className="text-sm text-emerald-600"
             onClick={() => setTipos((a) => [...a, { nombre: '', modificador: 0 }])}>+ Agregar tipo</button>
+        </div>
+
+        {/* Cuenta SPEI asociada */}
+        <div className="rounded-lg border border-neutral-200 p-4">
+          <p className="mb-1 font-medium">Cuenta SPEI del evento</p>
+          <p className="mb-3 text-xs text-neutral-400">
+            Es la cuenta que verán los compradores para pagar los boletos de este evento.
+          </p>
+          {speiCuentas.length ? (
+            <select className={inp} value={speiCuentaId} onChange={(e) => setSpeiCuentaId(e.target.value)}>
+              {speiCuentas.map((c) => (
+                <option key={c._id} value={c._id}>
+                  {c.alias} — {c.banco} · ••{c.clabe.slice(-4)}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className="text-sm text-amber-700">
+              No tienes cuentas SPEI registradas.{' '}
+              <Link href="/admin/perfil/spei" className="underline">Agrega una en tu perfil</Link>{' '}
+              para que los compradores puedan pagarte.
+            </p>
+          )}
         </div>
 
         {error && <p className="text-sm text-red-600">{error}</p>}

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { Evento, ItemCompra } from '@xoc/shared';
 
 interface SpeiInfo {
+  alias?: string | null;
   banco: string;
   clabe: string;
   beneficiario: string;
@@ -126,6 +127,7 @@ export default function BuyForm({ evento, spei }: { evento: Evento; spei: SpeiIn
       {spei ? (
         <div className="mt-5 rounded-lg bg-neutral-50 border border-neutral-200 p-4 text-sm space-y-1">
           <p className="font-medium text-neutral-800">Realiza tu pago por SPEI a:</p>
+          {spei.alias && <p className="text-xs text-neutral-400">{spei.alias}</p>}
           <p><span className="text-neutral-500">Banco:</span> {spei.banco}</p>
           <p><span className="text-neutral-500">Beneficiario:</span> {spei.beneficiario}</p>
           <p><span className="text-neutral-500">CLABE:</span> <span className="font-mono tracking-wide">{spei.clabe}</span></p>
