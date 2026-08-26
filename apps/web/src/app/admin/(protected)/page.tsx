@@ -49,10 +49,10 @@ export default async function AdminHome() {
           <h2 className="font-semibold">➕ Crear evento</h2>
           <p className="text-sm text-neutral-500">Registra un nuevo evento y publícalo en el feed.</p>
         </Link>
-        <Link href="/admin/reservaciones"
+        <Link href="/admin/mis-eventos"
           className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
-          <h2 className="font-semibold">🧾 Reservaciones</h2>
-          <p className="text-sm text-neutral-500">Revisa comprobantes SPEI y aprueba pagos.</p>
+          <h2 className="font-semibold">🎫 Mis eventos</h2>
+          <p className="text-sm text-neutral-500">Revisa las reservaciones y boletos de cada evento.</p>
         </Link>
         <Link href="/admin/perfil"
           className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm hover:shadow-md transition-shadow">

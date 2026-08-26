@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import SessionGuard from '@/components/SessionGuard';
+import AdminBackBar from './AdminBackBar';
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -9,6 +10,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
   return (
     <>
       <SessionGuard />
+      <AdminBackBar />
       {children}
     </>
   );

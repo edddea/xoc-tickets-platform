@@ -151,6 +151,90 @@ export async function crearEvento(input: CrearEventoInput, organizadorId: string
   return { _id: res.insertedId, ...doc };
 }
 
+/**
+ * Eventos visibles para un miembro del staff:
+ * - admin: todos los eventos (activos y pasados)
+ * - organizador/otros: solo los que organiza
+ * Cada evento incluye un resumen con total de reservaciones y cuántas están
+ * pendientes de aprobar (para mostrar indicadores en el menú).
+ */
+export async function listarEventosDeStaff(uid: string, role?: string) {
+  const events = await col('events');
+  const filtro = role === 'admin' ? {} : { organizadorId: new ObjectId(uid) };
+  const lista = await events.find(filtro).sort({ fecha: -1 }).toArray();
+  if (!lista.length) return [];
+
+  const reservations = await col('reservations');
+  const ids = lista.map((e) => e._id);
+  const agg = await reservations.aggregate([
+    { $match: { eventId: { $in: ids } } },
+    {
+      $group: {
+        _id: '$eventId',
+        total: { $sum: 1 },
+        pendientes: {
+          $sum: { $cond: [{ $in: ['$paymentStatus', ['en_revision', 'pendiente']] }, 1, 0] },
+        },
+      },
+    },
+  ]).toArray();
+  const resumen = new Map(agg.map((a) => [a._id.toString(), { total: a.total as number, pendientes: a.pendientes as number }]));
+
+  return lista.map((e) => ({
+    ...e,
+    resumen: resumen.get(e._id.toString()) ?? { total: 0, pendientes: 0 },
+  }));
+}
+
+/**
+ * Un evento con todas sus reservaciones, y por cada reservación sus boletos
+ * (con status) y datos del cliente. Usado en el detalle de "Mis eventos".
+ */
+export async function obtenerEventoConReservaciones(eventId: string) {
+  const events = await col('events');
+  const evento = await events.findOne({ _id: new ObjectId(eventId) });
+  if (!evento) return null;
+
+  const [reservationsCol, ticketsCol, clientsCol] = await Promise.all([
+    col('reservations'), col('tickets'), col('clients'),
+  ]);
+
+  const reservas = await reservationsCol.find({ eventId: evento._id }).sort({ createdAt: -1 }).toArray();
+  const [clientes, tickets] = await Promise.all([
+    clientsCol.find({ _id: { $in: reservas.map((r) => r.clientId) } }).toArray(),
+    ticketsCol.find({ eventId: evento._id }).toArray(),
+  ]);
+
+  const clientePorId = new Map(clientes.map((c) => [c._id.toString(), c]));
+  const seccionPorId = new Map(
+    ((evento.secciones ?? []) as { _id: ObjectId; nombre: string }[]).map((s) => [s._id.toString(), s.nombre])
+  );
+
+  const ticketsPorReserva = new Map<string, unknown[]>();
+  for (const t of tickets) {
+    const k = t.reservationId.toString();
+    if (!ticketsPorReserva.has(k)) ticketsPorReserva.set(k, []);
+    ticketsPorReserva.get(k)!.push({
+      _id: t._id,
+      status: t.status,
+      seccion: seccionPorId.get(t.seccionId?.toString()) ?? 'General',
+      codigo: t._id.toString().slice(-6).toUpperCase(),
+    });
+  }
+
+  return {
+    evento,
+    reservas: reservas.map((r) => {
+      const cli = clientePorId.get(r.clientId.toString());
+      return {
+        ...r,
+        cliente: cli ? { nombre: cli.nombre, correo: cli.correo, telefono: cli.telefono } : null,
+        tickets: ticketsPorReserva.get(r._id.toString()) ?? [],
+      };
+    }),
+  };
+}
+
 // generateReservation: inserta clients + reservations + tickets en UNA transacción.
 export async function generarReservacion(input: CrearReservacionInput) {
   const client = await getMongoClient();
