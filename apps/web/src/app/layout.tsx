@@ -13,8 +13,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <header className="border-b border-neutral-200 bg-white">
           <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-            <Link href="/" className="text-xl font-bold tracking-tight">
-              🎟️ Xoc Tickets
+            <Link href="/" className="inline-flex items-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo-xoc.png" alt="Xoc Tickets" className="h-9 w-auto" />
             </Link>
           </div>
         </header>

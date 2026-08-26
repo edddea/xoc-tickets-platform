@@ -11,6 +11,16 @@ export default async function Home() {
 
   return (
     <div>
+      {/* Hero: logo en primer plano, centrado, con vaivén suave */}
+      <div className="flex justify-center pt-4 pb-10 sm:pt-8 sm:pb-14">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/logo-xoc.png"
+          alt="Xoc Tickets"
+          className="logo-sway h-28 w-auto sm:h-40"
+        />
+      </div>
+
       <h1 className="mb-6 text-2xl font-bold">Eventos disponibles</h1>
       {eventos.length === 0 ? (
         <p className="text-neutral-500">Aún no hay eventos publicados.</p>
