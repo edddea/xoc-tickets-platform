@@ -1,6 +1,7 @@
 import './globals.css';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import LogoXoc from '@/components/LogoXoc';
 
 export const metadata: Metadata = {
   title: 'Xoc Tickets',
@@ -14,8 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <header className="border-b border-neutral-200 bg-white">
           <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
             <Link href="/" className="inline-flex items-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo-xoc.png" alt="Xoc Tickets" className="h-9 w-auto" />
+              <LogoXoc className="h-9 w-auto" />
             </Link>
           </div>
         </header>

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import LogoXoc from '@/components/LogoXoc';
 
 export const metadata: Metadata = {
   title: 'Publica tus eventos — Xoc Tickets',
@@ -55,8 +56,7 @@ export default function ContactoPage() {
     <div className="mx-auto max-w-3xl pb-4">
       {/* Hero */}
       <section className="reveal text-center">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo-xoc.png" alt="Xoc Tickets" className="logo-sway mx-auto h-20 w-auto sm:h-28" />
+        <LogoXoc className="mx-auto h-20 w-auto sm:h-28" />
         <h1 className="mt-6 text-3xl font-bold tracking-tight sm:text-4xl">
           Publica y vende boletos para tus eventos
         </h1>

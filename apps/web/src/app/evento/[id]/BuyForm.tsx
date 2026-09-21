@@ -23,6 +23,8 @@ export default function BuyForm({ evento, spei }: { evento: Evento; spei: SpeiIn
     return evento.secciones.reduce((acc, s) => acc + (cant[s._id] || 0) * s.costo, 0);
   }, [cant, evento.secciones]);
 
+  const esStripe = evento.paymentMethod === 'stripe';
+
   function setQty(seccionId: string, delta: number) {
     setCant((c) => ({ ...c, [seccionId]: Math.min(20, Math.max(0, (c[seccionId] || 0) + delta)) }));
   }
@@ -38,16 +40,20 @@ export default function BuyForm({ evento, spei }: { evento: Evento; spei: SpeiIn
     if (!items.length) return setError('Selecciona al menos un boleto.');
     if (!cliente.nombre || !cliente.correo || !cliente.telefono)
       return setError('Completa tus datos de contacto.');
-    if (!voucher) return setError('Adjunta tu comprobante de pago SPEI.');
+    if (!esStripe && !voucher) return setError('Adjunta tu comprobante de pago SPEI.');
 
     setLoading(true);
     try {
-      const fd = new FormData();
-      fd.append('file', voucher);
-      const up = await fetch('/api/upload', { method: 'POST', body: fd });
-      const upData = await up.json();
-      if (!up.ok) throw new Error(upData.error || 'No se pudo subir el comprobante.');
-      const { url } = upData;
+      // SPEI: sube el comprobante antes de crear la reservación.
+      let voucherUrl: string | null = null;
+      if (!esStripe && voucher) {
+        const fd = new FormData();
+        fd.append('file', voucher);
+        const up = await fetch('/api/upload', { method: 'POST', body: fd });
+        const upData = await up.json();
+        if (!up.ok) throw new Error(upData.error || 'No se pudo subir el comprobante.');
+        voucherUrl = upData.url;
+      }
 
       const res = await fetch('/api/reservations', {
         method: 'POST',
@@ -62,11 +68,13 @@ export default function BuyForm({ evento, spei }: { evento: Evento; spei: SpeiIn
             direccion: null,
           },
           items,
-          voucherUrl: url,
+          voucherUrl,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al reservar.');
+      // Stripe: redirige a la pasarela de pago. SPEI: va a la orden.
+      if (data.checkoutUrl) { window.location.href = data.checkoutUrl; return; }
       router.push(`/orden/${data.lookupToken}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error inesperado.');
@@ -123,44 +131,54 @@ export default function BuyForm({ evento, spei }: { evento: Evento; spei: SpeiIn
           value={cliente.edad} onChange={(e) => setCliente({ ...cliente, edad: e.target.value })} />
       </div>
 
-      {/* Datos SPEI */}
-      {spei ? (
-        <div className="mt-5 rounded-lg bg-neutral-50 border border-neutral-200 p-4 text-sm space-y-1">
-          <p className="font-medium text-neutral-800">Realiza tu pago por SPEI a:</p>
-          {spei.alias && <p className="text-xs text-neutral-400">{spei.alias}</p>}
-          <p><span className="text-neutral-500">Banco:</span> {spei.banco}</p>
-          <p><span className="text-neutral-500">Beneficiario:</span> {spei.beneficiario}</p>
-          <p><span className="text-neutral-500">CLABE:</span> <span className="font-mono tracking-wide">{spei.clabe}</span></p>
+      {esStripe ? (
+        /* Pago con tarjeta (Stripe) */
+        <div className="mt-5 rounded-lg bg-neutral-50 border border-neutral-200 p-4 text-sm text-neutral-600">
+          <p className="font-medium text-neutral-800">💳 Pago con tarjeta</p>
+          <p className="mt-1">Te llevaremos a la pasarela segura de Stripe para completar tu pago. Tus boletos se envían al instante en cuanto se confirma.</p>
         </div>
       ) : (
-        <div className="mt-5 rounded-lg bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">
-          El organizador aún no ha configurado sus datos de pago SPEI.
-        </div>
-      )}
+        <>
+          {/* Datos SPEI */}
+          {spei ? (
+            <div className="mt-5 rounded-lg bg-neutral-50 border border-neutral-200 p-4 text-sm space-y-1">
+              <p className="font-medium text-neutral-800">Realiza tu pago por SPEI a:</p>
+              {spei.alias && <p className="text-xs text-neutral-400">{spei.alias}</p>}
+              <p><span className="text-neutral-500">Banco:</span> {spei.banco}</p>
+              <p><span className="text-neutral-500">Beneficiario:</span> {spei.beneficiario}</p>
+              <p><span className="text-neutral-500">CLABE:</span> <span className="font-mono tracking-wide">{spei.clabe}</span></p>
+            </div>
+          ) : (
+            <div className="mt-5 rounded-lg bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">
+              El organizador aún no ha configurado sus datos de pago SPEI.
+            </div>
+          )}
 
-      {/* Comprobante */}
-      <div className="mt-4">
-        <label className="block text-sm font-medium text-neutral-700 mb-2">Comprobante de pago SPEI *</label>
-        <label className="flex items-center gap-3 cursor-pointer group">
-          <span className="inline-flex items-center gap-2 rounded-lg border-2 border-dashed border-neutral-300 px-4 py-2 text-sm text-neutral-500 transition-colors group-hover:border-emerald-500 group-hover:text-emerald-600">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 12V4m0 0L8 8m4-4l4 4" />
-            </svg>
-            {voucher ? voucher.name : 'Seleccionar archivo'}
-          </span>
-          <input type="file" accept="image/*,application/pdf" className="hidden"
-            onChange={(e) => setVoucher(e.target.files?.[0] ?? null)} />
-        </label>
-        {voucher && (
-          <p className="mt-1 text-xs text-neutral-400">{(voucher.size / 1024).toFixed(0)} KB · {voucher.type || 'archivo'}</p>
-        )}
-      </div>
+          {/* Comprobante */}
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-neutral-700 mb-2">Comprobante de pago SPEI *</label>
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <span className="inline-flex items-center gap-2 rounded-lg border-2 border-dashed border-neutral-300 px-4 py-2 text-sm text-neutral-500 transition-colors group-hover:border-emerald-500 group-hover:text-emerald-600">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 12V4m0 0L8 8m4-4l4 4" />
+                </svg>
+                {voucher ? voucher.name : 'Seleccionar archivo'}
+              </span>
+              <input type="file" accept="image/*,application/pdf" className="hidden"
+                onChange={(e) => setVoucher(e.target.files?.[0] ?? null)} />
+            </label>
+            {voucher && (
+              <p className="mt-1 text-xs text-neutral-400">{(voucher.size / 1024).toFixed(0)} KB · {voucher.type || 'archivo'}</p>
+            )}
+          </div>
+        </>
+      )}
 
       <div className="mt-5 flex items-center justify-between">
         <span className="text-lg font-bold">Total: ${total.toLocaleString('es-MX')}</span>
         <button type="submit" disabled={loading}
           className="rounded-lg bg-emerald-600 px-5 py-2.5 font-medium text-white disabled:opacity-50">
-          {loading ? 'Enviando…' : 'Reservar'}
+          {loading ? 'Procesando…' : esStripe ? 'Pagar con tarjeta' : 'Reservar'}
         </button>
       </div>
 
