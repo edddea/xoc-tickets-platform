@@ -388,17 +388,19 @@ export async function marcarSesionStripe(reservationId: string, sessionId: strin
   );
 }
 
-// Aprobación automática cuando Stripe confirma el pago (desde el webhook). Idempotente.
+// Aprobación automática cuando Stripe confirma el pago (webhook y/o página de orden).
+// A prueba de carreras e idempotente: solo UN llamador hace la transición
+// pendiente -> aprobado. Devuelve la reserva si la aprobó ahora, o null si ya
+// estaba aprobada (para no reenviar boletos por duplicado).
 export async function aprobarReservacionStripe(reservationId: string, paymentIntentId: string | null) {
   const reservations = await col('reservations');
   const tickets = await col('tickets');
   const _id = new ObjectId(reservationId);
-  const reserva = await reservations.findOne({ _id });
-  if (!reserva) return null;
-  if (reserva.paymentStatus === 'aprobado') return reserva; // ya procesada
-  await reservations.updateOne({ _id }, {
-    $set: { paymentStatus: 'aprobado', stripePaymentIntent: paymentIntentId, approvedAt: new Date() }
-  });
+  const res = await reservations.updateOne(
+    { _id, paymentStatus: { $ne: 'aprobado' } },
+    { $set: { paymentStatus: 'aprobado', stripePaymentIntent: paymentIntentId, approvedAt: new Date() } }
+  );
+  if (res.modifiedCount === 0) return null; // ya estaba aprobada (o no existe)
   await tickets.updateMany({ reservationId: _id }, { $set: { status: 'aprobado' } });
   return reservations.findOne({ _id });
 }
