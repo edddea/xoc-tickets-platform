@@ -1,5 +1,5 @@
 // Acceso a datos centralizado (la "capa middleware -> DataBase" del diagrama).
-import { ObjectId } from 'mongodb';
+import { ObjectId, ClientSession } from 'mongodb';
 import { col } from './db';
 import { randomToken } from './utils';
 import type {
@@ -144,11 +144,51 @@ export async function crearEvento(input: CrearEventoInput, organizadorId: string
     status: (input.status ?? 'borrador') as EventStatus,
     secciones: input.secciones.map((s) => ({ _id: new ObjectId(), ...s })),
     tiposBoleto: input.tiposBoleto.map((t) => ({ _id: new ObjectId(), ...t })),
+    paymentMethod: (input.paymentMethod ?? 'spei'),
     speiCuentaId: input.speiCuentaId ? new ObjectId(input.speiCuentaId) : null,
     createdAt: new Date()
   };
   const res = await events.insertOne(doc);
   return { _id: res.insertedId, ...doc };
+}
+
+/**
+ * Actualiza un evento existente. Verifica permisos: admin puede editar cualquiera,
+ * un organizador solo los suyos. Devuelve null si no existe o no tiene permiso.
+ */
+export async function actualizarEvento(
+  eventId: string,
+  input: CrearEventoInput,
+  uid: string,
+  role?: string
+) {
+  const events = await col('events');
+  const _id = new ObjectId(eventId);
+  const actual = await events.findOne({ _id });
+  if (!actual) return { error: 'no_encontrado' as const };
+  if (role !== 'admin' && actual.organizadorId?.toString() !== uid) {
+    return { error: 'sin_permiso' as const };
+  }
+
+  const set = {
+    titulo: input.titulo,
+    descripcion: input.descripcion,
+    venue: input.venue,
+    ubicacion: input.ubicacion,
+    fecha: new Date(input.fecha),
+    hora: input.hora,
+    precioBase: input.precioBase,
+    imagenes: input.imagenes ?? [],
+    capacidad: input.capacidad,
+    status: (input.status ?? actual.status) as EventStatus,
+    secciones: input.secciones.map((s) => ({ _id: new ObjectId(), ...s })),
+    tiposBoleto: input.tiposBoleto.map((t) => ({ _id: new ObjectId(), ...t })),
+    paymentMethod: (input.paymentMethod ?? 'spei'),
+    speiCuentaId: input.speiCuentaId ? new ObjectId(input.speiCuentaId) : null,
+    updatedAt: new Date(),
+  };
+  await events.updateOne({ _id }, { $set: set });
+  return { evento: await events.findOne({ _id }) };
 }
 
 /**
@@ -235,89 +275,134 @@ export async function obtenerEventoConReservaciones(eventId: string) {
   };
 }
 
-// generateReservation: inserta clients + reservations + tickets en UNA transacción.
-export async function generarReservacion(input: CrearReservacionInput) {
+// generateReservation: inserta clients + reservations + tickets.
+// Usa una transacción cuando el Mongo la soporta (replica set / Atlas). En un
+// Mongo standalone (dev local) hace fallback a inserciones sin transacción.
+type ReservaResultado = { lookupToken: string; reservationId: string; total: number; metodo: 'spei' | 'stripe'; eventoTitulo: string };
+
+export async function generarReservacion(input: CrearReservacionInput): Promise<ReservaResultado> {
   const client = await getMongoClient();
+  const db = client.db(process.env.MONGODB_DB || 'xoctickets');
+
+  const hacerReserva = async (session?: ClientSession): Promise<ReservaResultado> => {
+    const evento = await db.collection('events').findOne({ _id: new ObjectId(input.eventId) }, { session });
+    if (!evento) throw new Error('Evento no encontrado');
+
+    // Calcula total y arma tickets a partir de secciones/tipos del evento.
+    let total = 0;
+    const ticketsDocs: Record<string, unknown>[] = [];
+
+    const clienteRes = await db.collection('clients').insertOne({
+      nombre: input.cliente.nombre,
+      telefono: input.cliente.telefono,
+      correo: input.cliente.correo.toLowerCase().trim(),
+      edad: input.cliente.edad ?? null,
+      direccion: input.cliente.direccion ?? null,
+      createdAt: new Date(),
+    }, { session });
+    const clientId = clienteRes.insertedId;
+    const reservationId = new ObjectId();
+
+    for (const item of input.items) {
+      const seccion = (evento.secciones as { _id: ObjectId; costo: number }[])
+        .find((s) => s._id.toString() === item.seccionId);
+      if (!seccion) throw new Error('Sección inválida');
+      const tipo = item.tipoId
+        ? (evento.tiposBoleto as { _id: ObjectId; modificador: number }[]).find((t) => t._id.toString() === item.tipoId)
+        : null;
+      const precioUnit = seccion.costo + (tipo?.modificador ?? 0);
+
+      for (let i = 0; i < item.cantidad; i++) {
+        total += precioUnit;
+        ticketsDocs.push({
+          reservationId,
+          eventId: evento._id,
+          ownerClientId: clientId,
+          seccionId: seccion._id,
+          tipoId: tipo?._id ?? null,
+          status: 'solicitado',
+          qrToken: randomToken(16),
+          scannedAt: null,
+          scannedBy: null,
+          createdAt: new Date(),
+        });
+      }
+    }
+
+    // El método de cobro lo decide el evento (autoritativo del servidor), no el cliente.
+    const metodo: 'spei' | 'stripe' = evento.paymentMethod === 'stripe' ? 'stripe' : 'spei';
+    const feePct = Number(process.env.STRIPE_PLATFORM_FEE_PERCENT ?? '5');
+    const platformFee = metodo === 'stripe' ? Math.round((total * feePct) / 100) : null;
+    const organizerNet = metodo === 'stripe' ? total - (platformFee ?? 0) : null;
+
+    const lookupToken = randomToken(20);
+    await db.collection('reservations').insertOne({
+      _id: reservationId,
+      eventId: evento._id,
+      clientId,
+      totalPrice: total,
+      paymentMethod: metodo,
+      // SPEI: en_revision (validación manual del comprobante). Stripe: pendiente hasta que el webhook confirme el pago.
+      paymentStatus: metodo === 'stripe' ? 'pendiente' : 'en_revision',
+      voucherUrl: metodo === 'spei' ? (input.voucherUrl ?? null) : null,
+      lookupToken,
+      stripePaymentIntent: null,
+      stripeSessionId: null,
+      platformFee,
+      organizerNet,
+      approvedBy: null,
+      approvedAt: null,
+      createdAt: new Date(),
+    }, { session });
+
+    if (ticketsDocs.length) {
+      await db.collection('tickets').insertMany(ticketsDocs, { session });
+    }
+
+    return { lookupToken, reservationId: reservationId.toString(), total, metodo, eventoTitulo: String(evento.titulo ?? 'Boletos') };
+  };
+
   const session = client.startSession();
   try {
-    let resultado: { lookupToken: string; reservationId: string; total: number } | null = null;
-
-    await session.withTransaction(async () => {
-      const db = client.db(process.env.MONGODB_DB || 'xoctickets');
-      const evento = await db.collection('events')
-        .findOne({ _id: new ObjectId(input.eventId) }, { session });
-      if (!evento) throw new Error('Evento no encontrado');
-
-      // Calcula total y arma tickets a partir de secciones/tipos del evento.
-      let total = 0;
-      const ticketsDocs: Record<string, unknown>[] = [];
-
-      const clienteRes = await db.collection('clients').insertOne({
-        nombre: input.cliente.nombre,
-        telefono: input.cliente.telefono,
-        correo: input.cliente.correo.toLowerCase().trim(),
-        edad: input.cliente.edad ?? null,
-        direccion: input.cliente.direccion ?? null,
-        createdAt: new Date()
-      }, { session });
-      const clientId = clienteRes.insertedId;
-
-      const reservationId = new ObjectId();
-
-      for (const item of input.items) {
-        const seccion = (evento.secciones as { _id: ObjectId; costo: number }[])
-          .find((s) => s._id.toString() === item.seccionId);
-        if (!seccion) throw new Error('Sección inválida');
-        const tipo = item.tipoId
-          ? (evento.tiposBoleto as { _id: ObjectId; modificador: number }[])
-              .find((t) => t._id.toString() === item.tipoId)
-          : null;
-        const precioUnit = seccion.costo + (tipo?.modificador ?? 0);
-
-        for (let i = 0; i < item.cantidad; i++) {
-          total += precioUnit;
-          ticketsDocs.push({
-            reservationId,
-            eventId: evento._id,
-            ownerClientId: clientId,
-            seccionId: seccion._id,
-            tipoId: tipo?._id ?? null,
-            status: 'solicitado',
-            qrToken: randomToken(16),
-            scannedAt: null,
-            scannedBy: null,
-            createdAt: new Date()
-          });
-        }
-      }
-
-      const lookupToken = randomToken(20);
-      await db.collection('reservations').insertOne({
-        _id: reservationId,
-        eventId: evento._id,
-        clientId,
-        totalPrice: total,
-        paymentMethod: 'spei',
-        paymentStatus: 'en_revision',  // pendiente de validar comprobante SPEI
-        voucherUrl: input.voucherUrl ?? null,
-        lookupToken,
-        stripePaymentIntent: null,
-        approvedBy: null,
-        approvedAt: null,
-        createdAt: new Date()
-      }, { session });
-
-      if (ticketsDocs.length) {
-        await db.collection('tickets').insertMany(ticketsDocs, { session });
-      }
-
-      resultado = { lookupToken, reservationId: reservationId.toString(), total };
-    });
-
+    let resultado: ReservaResultado | null = null;
+    await session.withTransaction(async () => { resultado = await hacerReserva(session); });
     return resultado!;
+  } catch (e) {
+    // Mongo standalone (dev) no soporta transacciones: reintenta sin sesión.
+    const msg = e instanceof Error ? e.message : '';
+    if (/replica set|Transaction numbers|mongos/i.test(msg)) {
+      return await hacerReserva(undefined);
+    }
+    throw e;
   } finally {
     await session.endSession();
   }
+}
+
+// Guarda el id de la Checkout Session de Stripe en la reservación (para trazabilidad).
+export async function marcarSesionStripe(reservationId: string, sessionId: string) {
+  const reservations = await col('reservations');
+  await reservations.updateOne(
+    { _id: new ObjectId(reservationId) },
+    { $set: { stripeSessionId: sessionId } }
+  );
+}
+
+// Aprobación automática cuando Stripe confirma el pago (webhook y/o página de orden).
+// A prueba de carreras e idempotente: solo UN llamador hace la transición
+// pendiente -> aprobado. Devuelve la reserva si la aprobó ahora, o null si ya
+// estaba aprobada (para no reenviar boletos por duplicado).
+export async function aprobarReservacionStripe(reservationId: string, paymentIntentId: string | null) {
+  const reservations = await col('reservations');
+  const tickets = await col('tickets');
+  const _id = new ObjectId(reservationId);
+  const res = await reservations.updateOne(
+    { _id, paymentStatus: { $ne: 'aprobado' } },
+    { $set: { paymentStatus: 'aprobado', stripePaymentIntent: paymentIntentId, approvedAt: new Date() } }
+  );
+  if (res.modifiedCount === 0) return null; // ya estaba aprobada (o no existe)
+  await tickets.updateMany({ reservationId: _id }, { $set: { status: 'aprobado' } });
+  return reservations.findOne({ _id });
 }
 
 // approveReservation: valida pago y dispara generateTickets (status -> aprobado).

@@ -3,20 +3,8 @@
 :root { color-scheme: light; }
 body { @apply bg-neutral-50 text-neutral-900 antialiased; }
 
-/* Vaivén lento del logo: el pivote en la base hace que la parte superior
-   (los pétalos) se mueva más, como si el viento los soplara. */
-@keyframes logo-sway {
-  0%   { transform: rotate(-2deg); }
-  100% { transform: rotate(2deg); }
-}
-.logo-sway {
-  transform-origin: 50% 88%;
-  animation: logo-sway 8s ease-in-out infinite alternate;
-  will-change: transform;
-}
-@media (prefers-reduced-motion: reduce) {
-  .logo-sway { animation: none; }
-}
+/* El vaivén de los pétalos vive dentro del componente LogoXoc (SVG inline),
+   así solo se mueven los pétalos y las letras quedan fijas. */
 
 /* Entrada suave (fade + subida) para secciones de la guía. */
 @keyframes fade-in-up {

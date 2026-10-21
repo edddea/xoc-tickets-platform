@@ -10,6 +10,9 @@ export type PaymentStatus =
 
 export type PaymentMethod = 'spei' | 'stripe' | 'efectivo';
 
+// Método de cobro que un evento ofrece a sus compradores.
+export type EventoPaymentMethod = 'spei' | 'stripe';
+
 export type TicketStatus =
   | 'solicitado' | 'aprobado' | 'cancelado' | 'scanned';
 
@@ -52,7 +55,8 @@ export interface Evento {
   status: EventStatus;
   secciones: Seccion[];
   tiposBoleto: TipoBoleto[];
-  speiCuentaId?: string | null;   // cuenta SPEI del organizador asociada al evento
+  paymentMethod?: EventoPaymentMethod;   // 'spei' (default) o 'stripe' (tarjeta)
+  speiCuentaId?: string | null;          // cuenta SPEI del organizador (si paymentMethod === 'spei')
   createdAt: string;
 }
 
@@ -76,6 +80,9 @@ export interface Reservacion {
   voucherUrl?: string | null;
   lookupToken: string;
   stripePaymentIntent?: string | null;
+  stripeSessionId?: string | null;
+  platformFee?: number | null;      // comisión Xoc (mismo unidad que totalPrice)
+  organizerNet?: number | null;     // neto para el organizador
   approvedBy?: string | null;
   approvedAt?: string | null;
   createdAt: string;
@@ -110,6 +117,7 @@ export interface CrearEventoInput {
   status?: EventStatus;
   secciones: Omit<Seccion, '_id'>[];
   tiposBoleto: Omit<TipoBoleto, '_id'>[];
+  paymentMethod?: EventoPaymentMethod;
   speiCuentaId?: string | null;
 }
 

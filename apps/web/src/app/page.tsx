@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { listarEventosPublicos } from '@/lib/repo';
 import { serialize, money } from '@/lib/utils';
 import type { Evento } from '@xoc/shared';
+import LogoXoc from '@/components/LogoXoc';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,12 +14,7 @@ export default async function Home() {
     <div>
       {/* Hero: logo en primer plano, centrado, con vaivén suave */}
       <div className="flex justify-center pt-4 pb-10 sm:pt-8 sm:pb-14">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/logo-xoc.png"
-          alt="Xoc Tickets"
-          className="logo-sway h-28 w-auto sm:h-40"
-        />
+        <LogoXoc className="h-28 w-auto sm:h-40" />
       </div>
 
       <h1 className="mb-6 text-2xl font-bold">Eventos disponibles</h1>

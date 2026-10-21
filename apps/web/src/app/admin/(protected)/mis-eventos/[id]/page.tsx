@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import { obtenerEventoConReservaciones } from '@/lib/repo';
@@ -22,6 +23,7 @@ type Reserva = {
   lookupToken: string;
   totalPrice: number;
   paymentStatus: string;
+  paymentMethod?: string;
   voucherUrl?: string | null;
   createdAt: string;
   cliente: { nombre: string; correo: string; telefono: string } | null;
@@ -40,6 +42,8 @@ function estadoReserva(r: Reserva): { label: string; cls: string } {
       cls: 'bg-emerald-100 text-emerald-700',
     };
   }
+  // Pendiente: Stripe espera el pago con tarjeta; SPEI espera aprobación manual del comprobante.
+  if (r.paymentMethod === 'stripe') return { label: 'Pendiente de pago', cls: 'bg-amber-100 text-amber-700' };
   const porAprobar = r.tickets.filter((t) => t.status === 'solicitado').length || n;
   return { label: `${porAprobar} boleto${porAprobar === 1 ? '' : 's'} por aprobar`, cls: 'bg-amber-100 text-amber-700' };
 }
@@ -88,10 +92,21 @@ export default async function EventoDetallePage({ params }: { params: Promise<{ 
     </div>
   );
 
+  const cobroLabel = evento.paymentMethod === 'stripe' ? '💳 Tarjeta (Stripe)' : '🏦 Transferencia SPEI';
+
   return (
     <div>
-      <h1 className="text-2xl font-bold">{evento.titulo}</h1>
-      <p className="mt-1 text-sm text-neutral-500">{fechaLarga} · {evento.hora} · {evento.venue}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold">{evento.titulo}</h1>
+          <p className="mt-1 text-sm text-neutral-500">{fechaLarga} · {evento.hora} · {evento.venue}</p>
+          <p className="mt-1 text-xs text-neutral-400">Cobro: {cobroLabel}</p>
+        </div>
+        <Link href={`/admin/mis-eventos/${id}/editar`}
+          className="shrink-0 rounded-lg border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-600 hover:border-neutral-400 hover:text-neutral-800 transition-colors">
+          ✏️ Editar
+        </Link>
+      </div>
 
       {/* Resumen (por reservación) */}
       <div className="mt-4 grid grid-cols-4 gap-2">
@@ -125,7 +140,9 @@ export default async function EventoDetallePage({ params }: { params: Promise<{ 
         <div className="mt-3 space-y-3">
           {reservas.map((r) => {
             const est = estadoReserva(r);
-            const pendiente = r.paymentStatus === 'en_revision' || r.paymentStatus === 'pendiente';
+            // Solo SPEI se aprueba a mano; Stripe se aprueba solo al confirmarse el pago.
+            const puedeAprobarManual = r.paymentMethod === 'spei'
+              && (r.paymentStatus === 'en_revision' || r.paymentStatus === 'pendiente');
             // Conteo de boletos por status para el resumen del desplegable.
             const counts: Record<string, number> = {};
             for (const t of r.tickets) counts[t.status] = (counts[t.status] ?? 0) + 1;
@@ -186,8 +203,8 @@ export default async function EventoDetallePage({ params }: { params: Promise<{ 
                   </a>
                 )}
 
-                {/* Acciones solo si está pendiente de aprobar */}
-                {pendiente && r.cliente && (
+                {/* Acciones solo para SPEI pendiente de aprobar */}
+                {puedeAprobarManual && r.cliente && (
                   <RowActions
                     id={r._id}
                     lookupToken={r.lookupToken}
