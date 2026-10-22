@@ -48,7 +48,7 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
           {ev.secciones.map((s) => (
             <li key={s._id} className="flex justify-between border-b border-neutral-100 py-1">
               <span>{s.nombre}</span>
-              <span className="font-medium">{money(s.costo)}</span>
+              <span className="font-medium">{ev.paymentMethod === 'gratis' ? 'Gratis' : money(s.costo)}</span>
             </li>
           ))}
         </ul>

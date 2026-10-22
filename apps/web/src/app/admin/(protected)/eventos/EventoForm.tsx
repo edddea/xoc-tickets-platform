@@ -240,13 +240,13 @@ export default function EventoForm({ evento }: { evento?: Evento }) {
         <div className="rounded-lg border border-neutral-200 p-4">
           <p className="mb-1 font-medium">¿Cómo cobrarás los boletos?</p>
           <p className="mb-3 text-xs text-neutral-400">Elige el método de pago que verán los compradores de este evento.</p>
-          <div className="grid grid-cols-2 gap-2">
-            {(['spei', 'stripe'] as EventoPaymentMethod[]).map((m) => (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {(['spei', 'stripe', 'gratis'] as EventoPaymentMethod[]).map((m) => (
               <button key={m} type="button" onClick={() => setMetodo(m)}
                 className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
                   metodo === m ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-neutral-300 text-neutral-600 hover:border-neutral-400'
                 }`}>
-                {m === 'spei' ? '🏦 Transferencia SPEI' : '💳 Tarjeta (Stripe)'}
+                {m === 'spei' ? '🏦 Transferencia SPEI' : m === 'stripe' ? '💳 Tarjeta (Stripe)' : '🎟️ Gratis'}
               </button>
             ))}
           </div>
@@ -267,10 +267,16 @@ export default function EventoForm({ evento }: { evento?: Evento }) {
                 </p>
               )}
             </div>
-          ) : (
+          ) : metodo === 'stripe' ? (
             <div className="mt-3 rounded-lg bg-neutral-50 border border-neutral-200 p-3 text-sm text-neutral-600">
               Los compradores pagarán con tarjeta al instante y sus boletos se envían automáticamente.
               Xoc Tickets retiene una comisión del <strong>5%</strong> por venta.
+            </div>
+          ) : (
+            <div className="mt-3 rounded-lg bg-neutral-50 border border-neutral-200 p-3 text-sm text-neutral-600">
+              Evento <strong>gratuito</strong>: los asistentes solo reservan su lugar y reciben sus boletos
+              al instante (sin pago ni comprobante). Ideal para controlar el cupo. Los precios de las
+              secciones se ignoran.
             </div>
           )}
         </div>

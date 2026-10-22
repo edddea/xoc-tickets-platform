@@ -11,7 +11,8 @@ export type PaymentStatus =
 export type PaymentMethod = 'spei' | 'stripe' | 'efectivo';
 
 // Método de cobro que un evento ofrece a sus compradores.
-export type EventoPaymentMethod = 'spei' | 'stripe';
+// 'gratis' = evento sin costo (solo reservación para control de cupo).
+export type EventoPaymentMethod = 'spei' | 'stripe' | 'gratis';
 
 export type TicketStatus =
   | 'solicitado' | 'aprobado' | 'cancelado' | 'scanned';

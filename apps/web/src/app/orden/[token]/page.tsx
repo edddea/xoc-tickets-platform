@@ -5,16 +5,18 @@ import { serialize, money } from '@/lib/utils';
 import type { Evento, Reservacion, Ticket } from '@xoc/shared';
 import CompartirOrden from './CompartirOrden';
 import RefrescarPendiente from './RefrescarPendiente';
+import BoletosCarousel from './BoletosCarousel';
 
 export const dynamic = 'force-dynamic';
 
 // Texto de estado según el método de pago del evento.
 function estadoTexto(paymentStatus: string, metodo?: string): { txt: string; cls: string } {
   if (paymentStatus === 'aprobado') {
-    return {
-      txt: metodo === 'stripe' ? '✅ ¡Pago confirmado! Tus boletos están listos' : '✅ ¡Aprobada! Tus boletos están listos',
-      cls: 'text-emerald-700',
-    };
+    const txt =
+      metodo === 'stripe' ? '✅ ¡Pago confirmado! Tus boletos están listos'
+      : metodo === 'gratis' ? '✅ ¡Reservación confirmada! Tus boletos están listos'
+      : '✅ ¡Aprobada! Tus boletos están listos';
+    return { txt, cls: 'text-emerald-700' };
   }
   if (paymentStatus === 'rechazado') {
     return {
@@ -55,17 +57,25 @@ export default async function OrdenPage({
 
   const evento = serialize<Evento>(data.evento);
   const tickets = serialize<Ticket[]>(data.tickets);
+  const cliente = data.cliente;
 
   const metodo = reserva.paymentMethod;
   const estado = estadoTexto(reserva.paymentStatus, metodo);
   const aprobada = reserva.paymentStatus === 'aprobado';
   const stripePendiente = metodo === 'stripe' && reserva.paymentStatus === 'pendiente';
 
-  // Genera QR solo si está aprobada.
-  const qrs: Record<string, string> = {};
-  if (aprobada) {
-    for (const t of tickets) qrs[t._id] = await QRCode.toDataURL(t.qrToken);
-  }
+  // Nombre de sección por id (para mostrarlo en cada boleto).
+  const seccionPorId = new Map((evento?.secciones ?? []).map((s) => [s._id, s.nombre]));
+
+  // Genera los boletos con QR (solo si está aprobada) para el carrusel.
+  const boletos = aprobada
+    ? await Promise.all(tickets.map(async (t) => ({
+        codigo: t._id.slice(-6).toUpperCase(),
+        qr: await QRCode.toDataURL(t.qrToken),
+        seccion: seccionPorId.get(t.seccionId) ?? '',
+        status: t.status,
+      })))
+    : [];
 
   return (
     <div className="mx-auto max-w-xl">
@@ -76,8 +86,11 @@ export default async function OrdenPage({
         </div>
       )}
 
-      <h1 className="text-2xl font-bold">{evento?.titulo}</h1>
-      <p className="text-neutral-500">Orden #{reserva._id.slice(-6).toUpperCase()}</p>
+      <p className="text-sm text-neutral-500">{evento?.titulo}</p>
+      {cliente?.nombre && (
+        <h1 className="text-2xl font-bold leading-tight sm:text-3xl">Reservación de {cliente.nombre}</h1>
+      )}
+      <p className="mt-1 text-neutral-500">Orden #{reserva._id.slice(-6).toUpperCase()}</p>
 
       <div className="mt-4 rounded-lg border border-neutral-200 bg-white p-4">
         <p className={`font-medium ${estado.cls}`}>{estado.txt}</p>
@@ -95,22 +108,14 @@ export default async function OrdenPage({
       </div>
 
       <h2 className="mt-6 font-semibold">Tus boletos ({tickets.length})</h2>
-      <div className="mt-3 space-y-3">
-        {tickets.map((t) => (
-          <div key={t._id} className="flex items-center gap-4 rounded-lg border border-neutral-200 bg-white p-4">
-            <div className="h-24 w-24 shrink-0 bg-neutral-100">
-              {qrs[t._id]
-                // eslint-disable-next-line @next/next/no-img-element
-                ? <img src={qrs[t._id]} alt="QR" className="h-full w-full" />
-                : <div className="flex h-full w-full items-center justify-center text-xs text-neutral-400 text-center">QR disponible al confirmarse</div>}
-            </div>
-            <div className="text-sm">
-              <p className="font-medium">Boleto {t._id.slice(-6).toUpperCase()}</p>
-              <p className="text-neutral-500">Estado: {t.status}</p>
-            </div>
-          </div>
-        ))}
-      </div>
+      <p className="mb-3 text-xs text-neutral-400">Muestra un boleto a la vez en la entrada para escanear sin confusiones.</p>
+      {aprobada ? (
+        <BoletosCarousel boletos={boletos} />
+      ) : (
+        <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-500">
+          Tus {tickets.length} boleto{tickets.length === 1 ? '' : 's'} con código QR aparecerán aquí en cuanto se confirme la orden.
+        </div>
+      )}
     </div>
   );
 }
