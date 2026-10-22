@@ -92,7 +92,10 @@ export default async function EventoDetallePage({ params }: { params: Promise<{ 
     </div>
   );
 
-  const cobroLabel = evento.paymentMethod === 'stripe' ? '💳 Tarjeta (Stripe)' : '🏦 Transferencia SPEI';
+  const cobroLabel =
+    evento.paymentMethod === 'stripe' ? '💳 Tarjeta (Stripe)'
+    : evento.paymentMethod === 'gratis' ? '🎟️ Gratis (reservación)'
+    : '🏦 Transferencia SPEI';
 
   return (
     <div>

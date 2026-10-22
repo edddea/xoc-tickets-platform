@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generarReservacion, marcarSesionStripe } from '@/lib/repo';
 import { getStripe, stripeHabilitado } from '@/lib/stripe';
+import { enviarBoletosDeReserva } from '@/lib/notificar';
 import type { CrearReservacionInput } from '@xoc/shared';
 
 // POST /api/reservations -> generateReservation
@@ -66,6 +67,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Evento SPEI: se devuelve el lookupToken para redirigir a /orden/<token>.
+  // Evento gratuito: ya quedó aprobada; envía los boletos al instante.
+  if (res.metodo === 'gratis') {
+    await enviarBoletosDeReserva(res.reservationId);
+  }
+
+  // SPEI / gratis: se devuelve el lookupToken para redirigir a /orden/<token>.
   return NextResponse.json(res, { status: 201 });
 }

@@ -278,7 +278,7 @@ export async function obtenerEventoConReservaciones(eventId: string) {
 // generateReservation: inserta clients + reservations + tickets.
 // Usa una transacción cuando el Mongo la soporta (replica set / Atlas). En un
 // Mongo standalone (dev local) hace fallback a inserciones sin transacción.
-type ReservaResultado = { lookupToken: string; reservationId: string; total: number; metodo: 'spei' | 'stripe'; eventoTitulo: string };
+type ReservaResultado = { lookupToken: string; reservationId: string; total: number; metodo: 'spei' | 'stripe' | 'gratis'; eventoTitulo: string };
 
 export async function generarReservacion(input: CrearReservacionInput): Promise<ReservaResultado> {
   const client = await getMongoClient();
@@ -287,6 +287,14 @@ export async function generarReservacion(input: CrearReservacionInput): Promise<
   const hacerReserva = async (session?: ClientSession): Promise<ReservaResultado> => {
     const evento = await db.collection('events').findOne({ _id: new ObjectId(input.eventId) }, { session });
     if (!evento) throw new Error('Evento no encontrado');
+
+    // El método de cobro lo decide el evento (autoritativo del servidor), no el cliente.
+    const metodo: 'spei' | 'stripe' | 'gratis' =
+      evento.paymentMethod === 'stripe' ? 'stripe'
+      : evento.paymentMethod === 'gratis' ? 'gratis'
+      : 'spei';
+    // En eventos gratuitos la reservación se confirma al instante (solo control de cupo).
+    const ticketStatus = metodo === 'gratis' ? 'aprobado' : 'solicitado';
 
     // Calcula total y arma tickets a partir de secciones/tipos del evento.
     let total = 0;
@@ -320,7 +328,7 @@ export async function generarReservacion(input: CrearReservacionInput): Promise<
           ownerClientId: clientId,
           seccionId: seccion._id,
           tipoId: tipo?._id ?? null,
-          status: 'solicitado',
+          status: ticketStatus,
           qrToken: randomToken(16),
           scannedAt: null,
           scannedBy: null,
@@ -329,11 +337,18 @@ export async function generarReservacion(input: CrearReservacionInput): Promise<
       }
     }
 
-    // El método de cobro lo decide el evento (autoritativo del servidor), no el cliente.
-    const metodo: 'spei' | 'stripe' = evento.paymentMethod === 'stripe' ? 'stripe' : 'spei';
+    // Evento gratuito: total 0, sin comisión.
+    if (metodo === 'gratis') total = 0;
     const feePct = Number(process.env.STRIPE_PLATFORM_FEE_PERCENT ?? '5');
     const platformFee = metodo === 'stripe' ? Math.round((total * feePct) / 100) : null;
     const organizerNet = metodo === 'stripe' ? total - (platformFee ?? 0) : null;
+
+    // Estado del pago: gratis -> aprobado al instante; stripe -> pendiente (hasta el pago);
+    // spei -> en_revision (validación manual del comprobante).
+    const paymentStatus =
+      metodo === 'gratis' ? 'aprobado'
+      : metodo === 'stripe' ? 'pendiente'
+      : 'en_revision';
 
     const lookupToken = randomToken(20);
     await db.collection('reservations').insertOne({
@@ -342,8 +357,7 @@ export async function generarReservacion(input: CrearReservacionInput): Promise<
       clientId,
       totalPrice: total,
       paymentMethod: metodo,
-      // SPEI: en_revision (validación manual del comprobante). Stripe: pendiente hasta que el webhook confirme el pago.
-      paymentStatus: metodo === 'stripe' ? 'pendiente' : 'en_revision',
+      paymentStatus,
       voucherUrl: metodo === 'spei' ? (input.voucherUrl ?? null) : null,
       lookupToken,
       stripePaymentIntent: null,
@@ -351,7 +365,7 @@ export async function generarReservacion(input: CrearReservacionInput): Promise<
       platformFee,
       organizerNet,
       approvedBy: null,
-      approvedAt: null,
+      approvedAt: metodo === 'gratis' ? new Date() : null,
       createdAt: new Date(),
     }, { session });
 
@@ -432,9 +446,14 @@ export async function obtenerOrdenPorToken(token: string) {
   const reserva = await reservations.findOne({ lookupToken: token });
   if (!reserva) return null;
   const tickets = await col('tickets');
+  const clients = await col('clients');
   const evento = await obtenerEvento(reserva.eventId.toString());
   const lista = await tickets.find({ reservationId: reserva._id }).toArray();
-  return { reserva, evento, tickets: lista };
+  const clienteDoc = await clients.findOne({ _id: reserva.clientId });
+  const cliente = clienteDoc
+    ? { nombre: clienteDoc.nombre as string, correo: clienteDoc.correo as string }
+    : null;
+  return { reserva, evento, tickets: lista, cliente };
 }
 
 // getTicketById (por qrToken) y scan.

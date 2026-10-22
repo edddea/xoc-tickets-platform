@@ -24,6 +24,8 @@ export default function BuyForm({ evento, spei }: { evento: Evento; spei: SpeiIn
   }, [cant, evento.secciones]);
 
   const esStripe = evento.paymentMethod === 'stripe';
+  const esGratis = evento.paymentMethod === 'gratis';
+  const esSpei = !esStripe && !esGratis;
 
   function setQty(seccionId: string, delta: number) {
     setCant((c) => ({ ...c, [seccionId]: Math.min(20, Math.max(0, (c[seccionId] || 0) + delta)) }));
@@ -40,13 +42,13 @@ export default function BuyForm({ evento, spei }: { evento: Evento; spei: SpeiIn
     if (!items.length) return setError('Selecciona al menos un boleto.');
     if (!cliente.nombre || !cliente.correo || !cliente.telefono)
       return setError('Completa tus datos de contacto.');
-    if (!esStripe && !voucher) return setError('Adjunta tu comprobante de pago SPEI.');
+    if (esSpei && !voucher) return setError('Adjunta tu comprobante de pago SPEI.');
 
     setLoading(true);
     try {
       // SPEI: sube el comprobante antes de crear la reservación.
       let voucherUrl: string | null = null;
-      if (!esStripe && voucher) {
+      if (esSpei && voucher) {
         const fd = new FormData();
         fd.append('file', voucher);
         const up = await fetch('/api/upload', { method: 'POST', body: fd });
@@ -87,7 +89,7 @@ export default function BuyForm({ evento, spei }: { evento: Evento; spei: SpeiIn
 
   return (
     <form onSubmit={onSubmit} className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
-      <h2 className="text-lg font-semibold">Comprar boletos</h2>
+      <h2 className="text-lg font-semibold">{esGratis ? 'Reservar boletos' : 'Comprar boletos'}</h2>
       <p className="text-sm text-neutral-500">No necesitas crear cuenta.</p>
 
       {/* Selector de boletos */}
@@ -97,7 +99,7 @@ export default function BuyForm({ evento, spei }: { evento: Evento; spei: SpeiIn
           <div key={s._id} className="flex items-center justify-between gap-3 rounded-lg border border-neutral-100 bg-neutral-50 px-4 py-3">
             <div>
               <p className="text-sm font-medium">{s.nombre}</p>
-              <p className="text-xs text-neutral-400">${s.costo.toLocaleString('es-MX')} c/u</p>
+              <p className="text-xs text-neutral-400">{esGratis ? 'Gratis' : `$${s.costo.toLocaleString('es-MX')} c/u`}</p>
             </div>
             <div className="flex items-center gap-3">
               <button type="button"
@@ -137,6 +139,12 @@ export default function BuyForm({ evento, spei }: { evento: Evento; spei: SpeiIn
           <p className="font-medium text-neutral-800">💳 Pago con tarjeta</p>
           <p className="mt-1">Te llevaremos a la pasarela segura de Stripe para completar tu pago. Tus boletos se envían al instante en cuanto se confirma.</p>
         </div>
+      ) : esGratis ? (
+        /* Evento gratuito */
+        <div className="mt-5 rounded-lg bg-emerald-50 border border-emerald-200 p-4 text-sm text-emerald-800">
+          <p className="font-medium">🎟️ Evento gratuito</p>
+          <p className="mt-1">Solo reserva tu lugar. Recibirás tus boletos al instante, sin ningún pago.</p>
+        </div>
       ) : (
         <>
           {/* Datos SPEI */}
@@ -175,10 +183,10 @@ export default function BuyForm({ evento, spei }: { evento: Evento; spei: SpeiIn
       )}
 
       <div className="mt-5 flex items-center justify-between">
-        <span className="text-lg font-bold">Total: ${total.toLocaleString('es-MX')}</span>
+        <span className="text-lg font-bold">Total: {esGratis ? 'Gratis' : `$${total.toLocaleString('es-MX')}`}</span>
         <button type="submit" disabled={loading}
           className="rounded-lg bg-emerald-600 px-5 py-2.5 font-medium text-white disabled:opacity-50">
-          {loading ? 'Procesando…' : esStripe ? 'Pagar con tarjeta' : 'Reservar'}
+          {loading ? 'Procesando…' : esStripe ? 'Pagar con tarjeta' : esGratis ? 'Reservar gratis' : 'Reservar'}
         </button>
       </div>
 
