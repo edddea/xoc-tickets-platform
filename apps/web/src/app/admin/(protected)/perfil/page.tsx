@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 const ROL_LABEL: Record<UserRole, string> = {
   admin: 'Administrador',
   organizador: 'Organizador',
-  validador: 'Validador',
+  validador: 'Scanner',
 };
 
 export default async function PerfilPage() {

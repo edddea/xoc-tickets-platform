@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 const ROL_LABEL: Record<UserRole, string> = {
   admin: 'Administrador',
   organizador: 'Organizador',
-  validador: 'Validador',
+  validador: 'Scanner',
 };
 
 const ROL_COLOR: Record<UserRole, string> = {

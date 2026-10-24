@@ -18,3 +18,9 @@ body { @apply bg-neutral-50 text-neutral-900 antialiased; }
 @media (prefers-reduced-motion: reduce) {
   .reveal { opacity: 1; animation: none; transform: none; }
 }
+
+/* Barra de "siguiente en un momento" del escáner. */
+@keyframes xoc-progress {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
