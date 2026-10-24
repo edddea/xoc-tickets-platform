@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { auth } from '@/lib/auth';
 import { listarEventosDeStaff } from '@/lib/repo';
 import { serialize } from '@/lib/utils';
+import { inicioDeHoy, fechaEvento } from '@/lib/fechas';
 import type { UserRole } from '@xoc/shared';
 
 export const dynamic = 'force-dynamic';
@@ -21,7 +22,7 @@ export default async function MisEventosPage() {
   if (!uid) return <p className="text-neutral-500">No autenticado.</p>;
 
   const eventos = serialize<EventoResumen[]>(await listarEventosDeStaff(uid, role));
-  const ahora = Date.now();
+  const hoy = inicioDeHoy().getTime();
 
   return (
     <div>
@@ -36,7 +37,7 @@ export default async function MisEventosPage() {
       ) : (
         <div className="mt-5 space-y-3">
           {eventos.map((e) => {
-            const pasado = new Date(e.fecha).getTime() < ahora;
+            const pasado = new Date(e.fecha).getTime() < hoy;
             const { pendientes, total } = e.resumen;
             return (
               <Link
@@ -54,7 +55,7 @@ export default async function MisEventosPage() {
                     )}
                   </div>
                   <p className="mt-0.5 truncate text-sm text-neutral-500">
-                    {new Date(e.fecha).toLocaleDateString('es-MX', { dateStyle: 'medium' })} · {e.venue}
+                    {fechaEvento(e.fecha, { dateStyle: 'medium' })} · {e.venue}
                   </p>
                 </div>
                 <div className="shrink-0 text-right">

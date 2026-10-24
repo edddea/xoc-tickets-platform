@@ -1,6 +1,7 @@
 import { ObjectId } from 'mongodb';
 import { col } from './db';
 import { enviarBoletos } from './mail';
+import { fechaEvento } from './fechas';
 
 /**
  * Envía por correo los boletos (con QR) de una reservación ya aprobada.
@@ -25,7 +26,7 @@ export async function enviarBoletosDeReserva(reservationId: string): Promise<voi
     if (!cliente || !evento || !tickets.length) return;
 
     const secciones = (evento.secciones ?? []) as { _id: ObjectId; nombre: string }[];
-    const fechaFormateada = new Date(evento.fecha).toLocaleDateString('es-MX', {
+    const fechaFormateada = fechaEvento(evento.fecha, {
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
     });
 
