@@ -1,5 +1,5 @@
 // Acceso a datos centralizado (la "capa middleware -> DataBase" del diagrama).
-import { ObjectId, ClientSession } from 'mongodb';
+import { ObjectId, ClientSession, type Document, type WithId } from 'mongodb';
 import { col } from './db';
 import { randomToken } from './utils';
 import type {
@@ -462,15 +462,55 @@ export async function obtenerTicketPorQr(qrToken: string) {
   return tickets.findOne({ qrToken });
 }
 
+// "Quema" el boleto (aprobado -> scanned) de forma atómica: si dos escáneres leen
+// el mismo QR al mismo tiempo, solo uno gana; el otro recibe 'ya_escaneado'.
 export async function escanearTicket(qrToken: string, staffId: string) {
   const tickets = await col('tickets');
   const ticket = await tickets.findOne({ qrToken });
-  if (!ticket) return { ok: false, motivo: 'no_existe' as const };
-  if (ticket.status === 'scanned') return { ok: false, motivo: 'ya_escaneado' as const, ticket };
-  if (ticket.status !== 'aprobado') return { ok: false, motivo: 'no_aprobado' as const, ticket };
+  if (!ticket) return { ok: false as const, motivo: 'no_existe' as const };
 
-  await tickets.updateOne({ _id: ticket._id }, {
-    $set: { status: 'scanned', scannedAt: new Date(), scannedBy: new ObjectId(staffId) }
-  });
-  return { ok: true as const, ticket };
+  const res = await tickets.updateOne(
+    { _id: ticket._id, status: 'aprobado' },
+    { $set: { status: 'scanned', scannedAt: new Date(), scannedBy: new ObjectId(staffId) } }
+  );
+  const actual = (await tickets.findOne({ _id: ticket._id })) ?? ticket;
+  if (res.modifiedCount === 1) return { ok: true as const, ticket: actual };
+  if (actual.status === 'scanned') return { ok: false as const, motivo: 'ya_escaneado' as const, ticket: actual };
+  return { ok: false as const, motivo: 'no_aprobado' as const, ticket: actual };
+}
+
+// Busca un boleto por su código corto (los últimos 6 caracteres del id que se ven en
+// la orden). Fallback del escáner cuando el QR no se puede leer.
+export async function buscarTicketPorCodigo(codigo: string) {
+  const c = codigo.trim().toLowerCase().replace(/[^0-9a-f]/g, '');
+  if (c.length < 6) return { motivo: 'no_existe' as const };
+  const tickets = await col('tickets');
+  const lista = await tickets
+    .find({ $expr: { $regexMatch: { input: { $toString: '$_id' }, regex: `${c}$` } } })
+    .limit(2)
+    .toArray();
+  if (!lista.length) return { motivo: 'no_existe' as const };
+  if (lista.length > 1) return { motivo: 'ambiguo' as const };
+  return { ticket: lista[0] };
+}
+
+// Datos para mostrar en el escáner: a quién pertenece el boleto, de qué evento y sección.
+export async function detalleBoleto(ticket: WithId<Document>) {
+  const [eventos, reservas, clientes] = await Promise.all([col('events'), col('reservations'), col('clients')]);
+  const [evento, reserva] = await Promise.all([
+    eventos.findOne({ _id: ticket.eventId }),
+    reservas.findOne({ _id: ticket.reservationId }),
+  ]);
+  const cliente = reserva ? await clientes.findOne({ _id: reserva.clientId }) : null;
+  const seccion = ((evento?.secciones ?? []) as { _id: ObjectId; nombre: string }[])
+    .find((s) => s._id?.toString() === ticket.seccionId?.toString())?.nombre ?? '';
+  return {
+    codigo: ticket._id.toString().slice(-6).toUpperCase(),
+    status: ticket.status,
+    seccion,
+    evento: (evento?.titulo as string) ?? '',
+    eventoFecha: evento?.fecha ? new Date(evento.fecha).toISOString() : null,
+    cliente: (cliente?.nombre as string) ?? '',
+    scannedAt: ticket.scannedAt ? new Date(ticket.scannedAt).toISOString() : null,
+  };
 }

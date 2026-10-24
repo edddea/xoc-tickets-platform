@@ -1,11 +1,12 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { auth, signOut } from '@/lib/auth';
 import type { UserRole } from '@xoc/shared';
 
 const ROL_LABEL: Record<UserRole, string> = {
   admin: 'Administrador',
   organizador: 'Organizador',
-  validador: 'Validador',
+  validador: 'Scanner',
 };
 
 const ROL_COLOR: Record<UserRole, string> = {
@@ -18,6 +19,9 @@ export default async function AdminHome() {
   const session = await auth();
   const user = session?.user as { name?: string; email?: string; role?: UserRole } | undefined;
   const role = user?.role;
+
+  // El staff de acceso (Scanner) solo usa el escáner: lo llevamos directo ahí.
+  if (role === 'validador') redirect('/scan');
 
   return (
     <div>
@@ -64,6 +68,13 @@ export default async function AdminHome() {
             className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
             <h2 className="font-semibold">👥 Staff</h2>
             <p className="text-sm text-neutral-500">Administra los miembros del equipo y sus roles.</p>
+          </Link>
+        )}
+        {role === 'admin' && (
+          <Link href="/scan"
+            className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
+            <h2 className="font-semibold">📷 Escanear boletos</h2>
+            <p className="text-sm text-neutral-500">Abre el escáner de acceso para validar QR en la entrada.</p>
           </Link>
         )}
       </div>

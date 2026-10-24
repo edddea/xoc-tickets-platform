@@ -7,7 +7,7 @@ import type { UserRole } from '@xoc/shared';
 const ROLES: { value: UserRole; label: string; desc: string }[] = [
   { value: 'admin',       label: 'Administrador', desc: 'Acceso total: crea staff, eventos y aprueba pagos.' },
   { value: 'organizador', label: 'Organizador',    desc: 'Crea y gestiona sus propios eventos y reservaciones.' },
-  { value: 'validador',   label: 'Validador',      desc: 'Solo puede escanear QR en la entrada del evento.' },
+  { value: 'validador',   label: 'Scanner',        desc: 'Solo escanea boletos en la entrada del evento (app en /scan).' },
 ];
 
 export default function NuevoStaffPage() {

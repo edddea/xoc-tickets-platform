@@ -4,9 +4,16 @@ import LoginForm from './LoginForm';
 
 export const dynamic = 'force-dynamic';
 
-export default async function LoginPage() {
+// Solo se permite regresar a rutas internas (evita redirecciones abiertas).
+function destinoSeguro(url?: string) {
+  return url && url.startsWith('/') && !url.startsWith('//') ? url : '/admin';
+}
+
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ callbackUrl?: string }> }) {
+  const { callbackUrl } = await searchParams;
+  const destino = destinoSeguro(callbackUrl);
   const session = await auth();
-  if (session) redirect('/admin');
+  if (session) redirect(destino);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-neutral-50 px-4">
@@ -19,9 +26,9 @@ export default async function LoginPage() {
 
         <div className="rounded-2xl border border-neutral-200 bg-white p-8 shadow-sm">
           <h2 className="text-lg font-semibold">Iniciar sesión</h2>
-          <p className="mt-0.5 text-sm text-neutral-400">Administradores, organizadores y validadores.</p>
+          <p className="mt-0.5 text-sm text-neutral-400">Administradores, organizadores y scanners.</p>
 
-          <LoginForm />
+          <LoginForm destino={destino} />
         </div>
 
         <p className="mt-6 text-center text-xs text-neutral-400">

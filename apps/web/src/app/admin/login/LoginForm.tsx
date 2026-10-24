@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { signIn } from 'next-auth/react';
 
-export default function LoginForm() {
+export default function LoginForm({ destino = '/admin' }: { destino?: string }) {
   const [correo, setCorreo] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -16,7 +16,7 @@ export default function LoginForm() {
     const res = await signIn('credentials', { correo, password, redirect: false });
     setLoading(false);
     if (res?.error) setError('Correo o contraseña incorrectos.');
-    else window.location.href = '/admin';
+    else window.location.href = destino;
   }
 
   const inp = 'w-full rounded-lg border border-neutral-300 px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500';
