@@ -2,6 +2,8 @@
 import { ObjectId, ClientSession, type Document, type WithId } from 'mongodb';
 import { col } from './db';
 import { randomToken } from './utils';
+import { inicioDeHoy } from './fechas';
+import { motivoVentaCerrada, MENSAJE_CIERRE } from './venta';
 import type {
   CrearEventoInput, CrearReservacionInput, EventStatus
 } from '@xoc/shared';
@@ -115,10 +117,22 @@ export async function obtenerSpeiDeEvento(evento: {
   return cuentas[0]; // fallback: primera cuenta disponible
 }
 
+// Eventos que ya ocurrieron, del más reciente al más antiguo (sección pública
+// "Eventos pasados"). Excluye borradores y cancelados.
+export async function listarEventosPasados(limite = 6) {
+  const events = await col('events');
+  return events
+    .find({ status: { $in: ['publicado', 'agotado', 'finalizado'] }, fecha: { $lt: inicioDeHoy() } })
+    .sort({ fecha: -1 })
+    .limit(limite)
+    .toArray();
+}
+
+// Eventos publicados de hoy en adelante (siguen visibles todo el día del evento).
 export async function listarEventosPublicos() {
   const events = await col('events');
   return events
-    .find({ status: 'publicado', fecha: { $gte: new Date() } })
+    .find({ status: 'publicado', fecha: { $gte: inicioDeHoy() } })
     .sort({ fecha: 1 })
     .toArray();
 }
@@ -287,6 +301,10 @@ export async function generarReservacion(input: CrearReservacionInput): Promise<
   const hacerReserva = async (session?: ClientSession): Promise<ReservaResultado> => {
     const evento = await db.collection('events').findOne({ _id: new ObjectId(input.eventId) }, { session });
     if (!evento) throw new Error('Evento no encontrado');
+
+    // Solo se reserva si la venta está abierta (no pasado, cancelado, agotado ni finalizado).
+    const cierre = motivoVentaCerrada({ fecha: evento.fecha, status: evento.status });
+    if (cierre) throw new Error(MENSAJE_CIERRE[cierre]);
 
     // El método de cobro lo decide el evento (autoritativo del servidor), no el cliente.
     const metodo: 'spei' | 'stripe' | 'gratis' =

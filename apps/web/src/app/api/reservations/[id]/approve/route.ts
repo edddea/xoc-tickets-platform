@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { aprobarReservacion } from '@/lib/repo';
 import { serialize } from '@/lib/utils';
 import { enviarBoletos } from '@/lib/mail';
+import { fechaEvento } from '@/lib/fechas';
 import { col } from '@/lib/db';
 import { ObjectId } from 'mongodb';
 import type { UserRole } from '@xoc/shared';
@@ -33,7 +34,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
 
       if (cliente && evento && tickets.length) {
         const secciones = (evento.secciones ?? []) as { _id: ObjectId; nombre: string }[];
-        const fechaFormateada = new Date(evento.fecha).toLocaleDateString('es-MX', {
+        const fechaFormateada = fechaEvento(evento.fecha, {
           weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
         });
 

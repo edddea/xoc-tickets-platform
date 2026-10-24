@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import { obtenerEventoConReservaciones } from '@/lib/repo';
 import { serialize, money } from '@/lib/utils';
+import { fechaEvento } from '@/lib/fechas';
 import type { UserRole } from '@xoc/shared';
 import RowActions from './RowActions';
 
@@ -65,7 +66,7 @@ export default async function EventoDetallePage({ params }: { params: Promise<{ 
     return <p className="text-neutral-500">No tienes permiso para ver este evento.</p>;
   }
 
-  const fechaLarga = new Date(evento.fecha).toLocaleDateString('es-MX', {
+  const fechaLarga = fechaEvento(evento.fecha, {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
 
