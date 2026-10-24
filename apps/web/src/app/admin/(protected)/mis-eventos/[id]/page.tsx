@@ -86,6 +86,12 @@ export default async function EventoDetallePage({ params }: { params: Promise<{ 
     0
   );
 
+  // Boletos que ya ingresaron al evento (escaneados en la entrada).
+  const boletosIngresaron = reservas.reduce(
+    (acc, r) => acc + r.tickets.filter((t) => t.status === 'scanned').length,
+    0
+  );
+
   const chip = (n: number, label: string, cls: string) => (
     <div className={`rounded-lg px-3 py-2 text-center ${cls}`}>
       <p className="text-lg font-bold leading-none">{n}</p>
@@ -125,6 +131,17 @@ export default async function EventoDetallePage({ params }: { params: Promise<{ 
         <span className="text-sm font-medium">🎟️ Boletos aprobados en total</span>
         <span className="text-2xl font-bold leading-none">{boletosAprobados}</span>
       </div>
+
+      {/* Boletos que ya ingresaron (solo si hay alguno) */}
+      {boletosIngresaron > 0 && (
+        <div className="mt-2 flex items-center justify-between rounded-lg bg-blue-600 px-4 py-3 text-white">
+          <span className="text-sm font-medium">🚪 Boletos que ya ingresaron</span>
+          <span className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold leading-none">{boletosIngresaron}</span>
+            <span className="text-xs text-blue-100">de {boletosAprobados}</span>
+          </span>
+        </div>
+      )}
 
       {/* Leyenda de colores de boleto */}
       <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-500">
